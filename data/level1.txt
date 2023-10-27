@@ -1,0 +1,19 @@
+ :data/water_tile_64.png
+1:data/leaf_tile_64.png
+== comment
+1         
+ 1    1   
+    1     
+   1      
+     1 1  
+          
+   1   1  
+          
+1         
+          
+          
+          
+          
+          
+          
+== comment

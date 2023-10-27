@@ -1,0 +1,11 @@
+VELOCITY = 0.2
+START_AT = 0;0
+MAX_MOVE = 3
+RIGHT = frog_right.txt;1
+DOWN_RIGHT = frog_right.txt;1
+UP_RIGHT = frog_right.txt;1
+LEFT = frog_left.txt;1
+DOWN_LEFT = frog_left.txt;1
+UP_LEFT = frog_left.txt;1
+UP = frog_up.txt;1
+DOWN = frog_down.txt;1
