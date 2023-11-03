@@ -3,7 +3,6 @@ package com.goldberg.games2d;
 import com.goldberg.games2d.data.Level;
 import com.goldberg.games2d.exceptions.GraphicsException;
 import com.goldberg.games2d.gamelogic.PredefinedCommand;
-import com.goldberg.games2d.gamelogic.Sprite;
 import com.goldberg.games2d.gamelogic.UserInputTriggeredState;
 import com.goldberg.games2d.hardware.KeyPublisher;
 import com.google.inject.Guice;
@@ -31,10 +30,6 @@ import static java.lang.annotation.RetentionPolicy.RUNTIME;
 @Retention(RUNTIME)
 @interface GameUserInputHandlerMap {}
 
-//@Qualifier
-//@Retention(RUNTIME)
-//@interface DataDirectoryPath {}
-
 /**
  * Initializes and runs the game, including the GUI, sound etc
  */
@@ -46,8 +41,6 @@ public class Game {
     private final int PAUSE_KEY;
     private final int EXIT_KEY;
     private final String dataDirPath;
-    @Inject
-    private Sprite frog;
 
     @Inject
     public Game(BlockingQueue<int[]> comingKeys,
@@ -77,7 +70,8 @@ public class Game {
             Game game = injector.getInstance(Game.class);
             KeyPublisher keysSource = injector.getInstance(KeyPublisher.class);
             game.initGUI();
-            game.initGameParts();
+            game.currentLevel = injector.getInstance(Level.class);
+            logger.debug("level loaded");
             game.device.getFullScreenWindow().addKeyListener(keysSource);
             logger.debug("about to go into the gameLoop");
             game.runTheGameLoop();
@@ -118,17 +112,7 @@ public class Game {
         }
         frame.createBufferStrategy(2);
     }
-
-    /**
-     * todo change to something intelligent
-     */
-    private void initGameParts(){
-        currentLevel = new Level();
-        currentLevel.read(dataDirPath+"level1.txt");
-        logger.debug("level loaded");
-        // Sprite initialization
-    }
-
+    
 
     private void processUserInput(Graphics2D g, long currentGameTime){
         boolean spritesProcessed = false; // for more than 1 sprite, make this an array
@@ -139,7 +123,7 @@ public class Game {
                     logger.debug("processing key {}",message[0]);
                     userInputHandlers.get(message[0]).processMessage(message);
                 } else if (PredefinedCommand.valueOfKey(message[0])!=null) {
-                    frog.processMessage(message,currentGameTime,currentLevel,g);
+                    currentLevel.processMessage(message,currentGameTime,g);
                     spritesProcessed = true;
                 }
             } catch (InterruptedException ie){
@@ -148,7 +132,7 @@ public class Game {
         }
         if(!spritesProcessed){
             // for more than 1 sprite, make this a loop
-            frog.processGameTick(currentGameTime,g);
+            currentLevel.processGameTick(currentGameTime, g);
         }
     }
    

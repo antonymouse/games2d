@@ -1,3 +1,5 @@
+sprite0:frog.txt
+sprite1:plant1.txt
  :data/water_tile_64.png
 1:data/leaf_tile_64.png
 == comment
@@ -15,5 +17,5 @@
           
           
           
-          
+   1      
 == comment

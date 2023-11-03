@@ -1,5 +1,26 @@
 # games2d
-An experiment designed to check if games can be build in Java using techniques and patterns typically used for enterprise develelopment. Another goal is to compare abstractions created in such process with regular gamedev abstractions. Output of the project will consist of 2- and 3D game platforms feature-limited but ready for customization.
+## The goal
+The goal of this project is to explore gaming platform development in Java. A lot of people do that, there are many
+school courses, textbooks, and commercial projects. My specific goals to see what kind of design abstractions the
+design based on general design principles used in regular software development will lead me to. The typical approach of 
+game engines is to optimize as much as they can and ignore the principles of software engineering. I want to do the
+opposite.
+Delivering complete products isn't the goal. I want to get the code to the point where it executes and demonstrates the
+correct behaviors for most interesting game platform use-cases. By "platform" I mean an execution environment for a
+certain class of games (for example, 2d platformers). Such execution environment should be able to play any game of this
+class mostly defined by configuration. Of course, a configuration is also "the code". In this case, though, the
+configuration should be really simple and held by external ascii files.
+## Design and Structure
+These concepts are addressed by documentation in docs folder.
+## Platform development news
+### 12/19/2023
+The platform supports a game field with various types of cells and npcs. Npcs interact with players. Npcs, players, and
+game field is fully configurable. The NPCs and player's behavior is customizable, but relies on code components for
+implementation.
+Constraints:
+1. The level map doesn't scroll
+2. There is only 1 resolution.
+### 10/27/2023
 Currently the game is constrained in the following ways:
 1. It's a tile-based game
 2. The level map doesn't scroll

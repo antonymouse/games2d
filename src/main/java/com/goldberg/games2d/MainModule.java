@@ -1,10 +1,8 @@
 package com.goldberg.games2d;
 
+import com.goldberg.games2d.data.Level;
 import com.goldberg.games2d.exceptions.Games2dException;
-import com.goldberg.games2d.gamelogic.GamePause;
-import com.goldberg.games2d.gamelogic.GameQuit;
-import com.goldberg.games2d.gamelogic.Sprite;
-import com.goldberg.games2d.gamelogic.UserInputTriggeredState;
+import com.goldberg.games2d.gamelogic.*;
 import com.goldberg.games2d.hardware.KeyPublisher;
 import com.google.inject.AbstractModule;
 import com.google.inject.Provides;
@@ -12,6 +10,7 @@ import com.google.inject.Singleton;
 import com.google.inject.name.Named;
 import com.google.inject.name.Names;
 
+import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -40,6 +39,7 @@ public class MainModule extends AbstractModule {
         } catch (IOException e) {
             throw new Games2dException("Unable to read key configuration file",e);
         }
+        bind(Sprite.class).toProvider(SpriteProvider.class);
         Names.bindProperties(binder(), keyMap);
         bind(Game.class).in(Singleton.class);
         bind(KeyListener.class).to(KeyPublisher.class).in(Singleton.class);
@@ -63,12 +63,57 @@ public class MainModule extends AbstractModule {
         handlers.put(state.codeMappedTo(),state);
         return handlers;
     }
-    @Provides @Singleton
-    Sprite makeSprite(@Named("DataDirectoryPath") String dataDirPath){
-        return new Sprite(dataDirPath,"frog.txt");
+//    @Provides @Singleton
+//    Sprite makeSprite(@Named("DataDirectoryPath") String dataDirPath, CommandSet defaultCommands, 
+//                      Map<String,BehaviorStyle> behaviors){
+//        return new Sprite(dataDirPath,"frog.txt", defaultCommands, behaviors);
+//    }
+    @Provides
+    CommandSet makeCommandSet(){
+        return new CommandSet().addCommand(new KeyCommand(0,1,"DOWN", KeyEvent.VK_DOWN))
+                .addCommand(new KeyCommand(1,1,"DOWN_RIGHT",KeyEvent.VK_PAGE_DOWN))
+                .addCommand(new KeyCommand(1,0,"RIGHT",KeyEvent.VK_RIGHT))
+                .addCommand(new KeyCommand(1,-1,"UP_RIGHT",KeyEvent.VK_PAGE_UP))
+                .addCommand(new KeyCommand(0,-1,"UP",KeyEvent.VK_UP))
+                .addCommand(new KeyCommand(-1,-1,"UP_LEFT",KeyEvent.VK_HOME))
+                .addCommand(new KeyCommand(-1,0,"LEFT",KeyEvent.VK_LEFT))
+                .addCommand(new KeyCommand(-1,1,"DOWN_LEFT",KeyEvent.VK_END));
     }
-
-
+    @Provides @Singleton
+    Map<String,BehaviorStyle> makeBehaviors(Player player, Immovable immovable){
+        HashMap<String, BehaviorStyle> behaviors = new HashMap<>();
+        behaviors.put("PLAYER",player);
+        behaviors.put("IMMOVABLE",immovable);
+        return  behaviors;
+    }
+    @Provides @Singleton
+    Map<String,Interaction> makeInteractions(){
+        HashMap<String, Interaction> interactions = new HashMap<>();
+        interactions.put("FROG_EATEN_BY_PLANT",new FrogIsEatenByPlantInteraction());
+        interactions.put("PLANT_EATS_FROG",new PlantEatsFrogInteraction());
+        return  interactions;
+    }
+    @Provides
+    Player makePlayer(){
+        return new Player();
+    }
+    @Provides
+    Immovable makeImmovable(){
+        return new Immovable();
+    }
+    
     @Provides @Named("DataDirectoryPath")
     String dataDirectoryPath(){ return "data/"; }
+
+    /**
+     * todo needs to be extended to more than one level
+     * @return an instance of game level. Currently, reads a single configuration file.
+     */
+    @Provides
+    Level makeLevel(SpriteProvider spriteProvider, @Named("DataDirectoryPath") String dataDirPath, 
+                    Map<String,Interaction> interactions){
+        Level currentLevel = new Level(spriteProvider, dataDirPath, interactions );
+        currentLevel.read("level1.txt");
+        return currentLevel;
+    }
 }
