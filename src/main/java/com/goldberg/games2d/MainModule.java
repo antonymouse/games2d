@@ -3,6 +3,7 @@ package com.goldberg.games2d;
 import com.goldberg.games2d.data.Level;
 import com.goldberg.games2d.exceptions.Games2dException;
 import com.goldberg.games2d.gamelogic.*;
+import com.goldberg.games2d.hardware.ImageInfo;
 import com.goldberg.games2d.hardware.KeyPublisher;
 import com.google.inject.AbstractModule;
 import com.google.inject.Provides;
@@ -44,8 +45,13 @@ public class MainModule extends AbstractModule {
         bind(Game.class).in(Singleton.class);
         bind(KeyListener.class).to(KeyPublisher.class).in(Singleton.class);
     }
-    @Provides @Singleton
+    @Provides @Singleton @Named("KeyInputQueue")
     BlockingQueue<int[]> makeKeyCommunicationQueue(){
+        return new ArrayBlockingQueue<>(100);
+    }
+
+    @Provides @Singleton @Named("LevelDrawingQueue")
+    BlockingQueue<ImageInfo> makeLevelDrawingQueue(){
         return new ArrayBlockingQueue<>(100);
     }
 
@@ -86,13 +92,6 @@ public class MainModule extends AbstractModule {
         behaviors.put("IMMOVABLE",immovable);
         return  behaviors;
     }
-    @Provides @Singleton
-    Map<String,Interaction> makeInteractions(){
-        HashMap<String, Interaction> interactions = new HashMap<>();
-        interactions.put("FROG_EATEN_BY_PLANT",new FrogIsEatenByPlantInteraction());
-        interactions.put("PLANT_EATS_FROG",new PlantEatsFrogInteraction());
-        return  interactions;
-    }
     @Provides
     Player makePlayer(){
         return new Player();
@@ -111,8 +110,8 @@ public class MainModule extends AbstractModule {
      */
     @Provides
     Level makeLevel(SpriteProvider spriteProvider, @Named("DataDirectoryPath") String dataDirPath, 
-                    Map<String,Interaction> interactions){
-        Level currentLevel = new Level(spriteProvider, dataDirPath, interactions );
+                    @Named("LevelDrawingQueue") BlockingQueue<ImageInfo> levelDrawingQueue){
+        Level currentLevel = new Level(spriteProvider, dataDirPath, levelDrawingQueue);
         currentLevel.read("level1.txt");
         return currentLevel;
     }

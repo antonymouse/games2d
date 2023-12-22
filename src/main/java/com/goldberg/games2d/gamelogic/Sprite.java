@@ -4,16 +4,17 @@ import com.goldberg.games2d.data.Coordinates;
 import com.goldberg.games2d.data.Level;
 import com.goldberg.games2d.exceptions.AnimationException;
 import com.goldberg.games2d.exceptions.LevelBuildingException;
+import com.goldberg.games2d.hardware.ImageInfo;
+import com.google.inject.name.Named;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.awt.*;
 import java.awt.event.KeyEvent;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.*;
+import java.util.concurrent.BlockingQueue;
 
 /**
  * The class is a container for all {@link Animation}s for one character. Animations are stateless, this class is 
@@ -33,11 +34,10 @@ public class Sprite {
     private final Map<Command,Animation> animations;
     private final Map<Command,String> actionTargets;
     private final List<BehaviorStyle> myBehaviors;
-    private final List<Interaction> myInteractions;
     // these 2 are required at the configuration only
     private final  Map<String, BehaviorStyle> availableBehaviors;
-    private final Map<String, Interaction> interactions;
     private final String dataDirPath;
+    private final BlockingQueue<ImageInfo> levelDrawingQueue;
     private static final Logger logger = LogManager.getLogger();
 
     /**
@@ -56,18 +56,17 @@ public class Sprite {
      * @param dataDirPath  path to the folder with all the data files
      * @param copy sprite-specific copy of the command set
      * @param availableBehaviors all behaviors on this level
-     * @param interactions all interactions on this level
      */
-    public Sprite(String dataDirPath, CommandSet copy, Map<String, BehaviorStyle> availableBehaviors, Map<String, Interaction> interactions) {
+    public Sprite(String dataDirPath, CommandSet copy, Map<String, BehaviorStyle> availableBehaviors,
+                  @Named("LevelDrawingQueue")BlockingQueue<ImageInfo> levelDrawingQueue) {
         this.dataDirPath = dataDirPath;
+        this.levelDrawingQueue = levelDrawingQueue;
         animations = new HashMap<>();
         actionTargets = new HashMap<>();
-        logger.debug("available behaviors {},interactions {} in the system",availableBehaviors.size(),interactions.size());
+        logger.debug("available behaviors {} in the system",availableBehaviors.size());
         myBehaviors = new ArrayList<>();
-        myInteractions = new ArrayList<>();
         myCommands = copy;
         this.availableBehaviors = availableBehaviors;
-        this.interactions = interactions;
     }
 
     public float getMaxMoveDistance() {
@@ -110,7 +109,11 @@ public class Sprite {
          */
         public void setCurrentCommand(Command currentCommand) {
             this.currentCommand = currentCommand;
-            currentAnimation = animations.get(currentCommand);
+            currentAnimation = animations.get(this.currentCommand);
+        }
+        public void setCurrentCommand(String currentCommand) {
+            this.currentCommand = myCommands.byName(currentCommand);
+            currentAnimation = animations.get(this.currentCommand);
         }
 
         /**
@@ -124,10 +127,23 @@ public class Sprite {
                 energyLevel = 0;
             }
         }
+        /**
+         * @return current energy level
+         */
+        public int getEnergyLevel(){
+            return state.energyLevel;
+        }
+
+        /**
+         * @return current position of the Sprite.
+         */
+        public Coordinates getCurrent(){
+            return current;
+        }
     }
 
     private State state;
-    State getState(){
+    public State getState(){
         return state;
     }
     /**
@@ -168,19 +184,12 @@ public class Sprite {
                 } else if (keyName.startsWith(MOVEMENT_STYLE_KEY)) {
                     logger.debug("Looking for a behavior by name {}",descriptor.getProperty(keyName));
                     BehaviorStyle currentBehavior = availableBehaviors.get(descriptor.getProperty(keyName));
-                    Interaction currentInteraction = interactions.get(descriptor.getProperty(keyName));
-                    if(currentBehavior == null && currentInteraction == null){
+                    if(currentBehavior == null){
                         throw new LevelBuildingException("Unable to locate neither a behavior nor an interaction for " +
                                 "name "+descriptor.getProperty(keyName));
                     } else {
                         spriteType.add(descriptor.getProperty(keyName));
-                        if (currentBehavior!=null) {
-                            myBehaviors.add(currentBehavior);
-                        } 
-                        if (currentInteraction!=null) {
-                            logger.debug("found interaction {}",currentInteraction);
-                            myInteractions.add(currentInteraction);
-                        }
+                        myBehaviors.add(currentBehavior);
                     }
                 } else {
                     String animationPath = descriptor.getProperty(keyName).split(";")[0];
@@ -190,7 +199,7 @@ public class Sprite {
                     Animation currentAnimation = usedAnimations.get(currentPath);
                     if (currentAnimation == null) {
                         logger.debug("creating new animation for path {}",currentPath);
-                        currentAnimation = new Animation(dataDirPath, animationPath);
+                        currentAnimation = new Animation(dataDirPath, animationPath, levelDrawingQueue);
                         usedAnimations.put(currentPath, currentAnimation);
                     }
                     animations.put(myCommands.byName(keyName), currentAnimation);
@@ -212,7 +221,6 @@ public class Sprite {
             // todo this HAS to change for more than one plant or any other setup where more than one instance
             //      can have the same behavior
             myBehaviors.forEach(behavior-> behavior.initialize(state,velocity,myCommands));
-            myInteractions.forEach(interaction->interaction.initialize(this,myCommands));
         }
         return this;
     }
@@ -222,15 +230,14 @@ public class Sprite {
      *
      * @param message           some keyboard event
      * @param currentTime       current game time
-     * @param g                 to draw on if needed
      */
-    public void processMessage(int[] message, long currentTime, Level level, Graphics2D g){
+    public void processMessage(int[] message, long currentTime, Level level){
         //state management
         if(state.energyLevel==0)
             return; // if it's dead, it's dead (but can come back if something rises the level)
         if(message[1]== KeyEvent.KEY_RELEASED){
             // ignore key release - not a command FOR THIS SPRITE
-            processGameTick(currentTime, g);
+            processGameTick(currentTime);
             return;
         }
         //we haven't seen this time tick before
@@ -244,16 +251,13 @@ public class Sprite {
                 target = null;
             }
             myBehaviors.forEach(behaviorStyle -> behaviorStyle.selectGoal(command, target, currentTime ));
-            myInteractions.forEach(interaction -> interaction.processInteraction(currentTime));
+//            myInteractions.forEach(interaction -> interaction.processInteraction(currentTime));
             
         }
         if(state.currentCommand == null){
             logger.fatal("Current command is not set.");
         }
-//        else if (state.currentAnimation==null) {
-//            state.currentAnimation = animations.get(state.currentCommand);
-//        }
-        drawCurrentPosition(currentTime,g);
+        drawCurrentPosition(currentTime);
     }
 
     /**
@@ -261,22 +265,18 @@ public class Sprite {
      * if there is no command, but a game time has passed OR we need to redraw because screen buffer didn't survive
      *
      * @param currentTime       current game time
-     * @param g                 where to draw
      */
-    public void processGameTick(long currentTime, Graphics2D g){
+    public void processGameTick(long currentTime){
         if(state.energyLevel==0)
             return; // if it's dead, it's dead (but can come back if something rises the level)
         if (state.stateChangedAt < currentTime) {
             myBehaviors.forEach(bs->bs.selectGoal(currentTime));
-            myInteractions.forEach(interaction -> interaction.processInteraction(currentTime));
+//            myInteractions.forEach(interaction -> interaction.processInteraction(currentTime));
         }
         if(state.currentCommand == null){
             logger.fatal("Current command is not set.");
         } 
-//        else if (state.currentAnimation==null) {
-//            state.currentAnimation = animations.get(state.currentCommand);
-//        }
-        drawCurrentPosition(currentTime, g);
+        drawCurrentPosition(currentTime);
     }
 
 
@@ -284,9 +284,8 @@ public class Sprite {
      * Draws a frame of current animation in the current position if the buffer needs to be redrawn. Minimizes the
      * calculations and avoids calculating deltas
      * @param currentTime current game time
-     * @param g where to draw
      */
-    private void drawCurrentPosition(long currentTime, Graphics2D g){
+    private void drawCurrentPosition(long currentTime){
         if(state.currentCommand == null || state.currentAnimation ==null) {
             String behaviorStyle = (myBehaviors == null || myBehaviors.isEmpty())? "null" : myBehaviors.get(0).toString();
             int numBehaviors = (myBehaviors == null || myBehaviors.isEmpty())? 0: myBehaviors.size();
@@ -295,7 +294,7 @@ public class Sprite {
         }
             
         state.currentAnimation.draw(state.start_time, state.completion_time, currentTime,state.current.getX() ,
-                state.current.getY(), g);
+                state.current.getY());
     }
 
     /**
@@ -306,15 +305,6 @@ public class Sprite {
         return spriteType.contains(type);
     }
 
-    /**
-     * Increments or decrements energy level by the given value (positive or negative). If energy level falls
-     * below 0, it's set to 0
-     * @param delta the change value
-     */
-    public void changeEnergyLevel(int delta){
-        state.changeEnergyLevel(delta);
-    }
-    
     /**
      * @return copy (change to the values is not reflected by the internal state) of the current location
      */

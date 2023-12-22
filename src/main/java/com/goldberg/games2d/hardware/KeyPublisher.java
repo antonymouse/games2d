@@ -2,6 +2,7 @@ package com.goldberg.games2d.hardware;
 
 import com.goldberg.games2d.exceptions.CommunicationException;
 import com.google.inject.Inject;
+import com.google.inject.name.Named;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -21,7 +22,7 @@ public class KeyPublisher implements KeyListener {
      */
     private final BlockingQueue<int[]> comingKeys;
     @Inject
-    public KeyPublisher(BlockingQueue<int[]> comingKeys) {
+    public KeyPublisher(@Named("KeyInputQueue") BlockingQueue<int[]> comingKeys) {
         logger.debug("KeyPublisher instantiated");
         this.comingKeys = comingKeys;
     }

@@ -1,6 +1,7 @@
 package com.goldberg.games2d.gamelogic;
 
 import com.goldberg.games2d.exceptions.AnimationException;
+import com.goldberg.games2d.hardware.ImageInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -12,6 +13,7 @@ import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Properties;
+import java.util.concurrent.BlockingQueue;
 
 /**
  * Contains a sequence of images that need to be shown when a moving part makes a move.
@@ -28,6 +30,7 @@ public class Animation {
     private final float[] durationSequence;
     private final Image[] frames;
     private static final Logger logger = LogManager.getLogger();
+    private final BlockingQueue<ImageInfo> levelDrawingQueue;
 
     /**
      * Parses the descriptor and loads frames
@@ -35,7 +38,8 @@ public class Animation {
      * @param dataDirPath where all the data files are
      * @param animationDescriptor properties where the information about the animation is stored
      */
-    public Animation(String dataDirPath, String animationDescriptor){
+    public Animation(String dataDirPath, String animationDescriptor, BlockingQueue<ImageInfo> levelDrawingQueue){
+        this.levelDrawingQueue = levelDrawingQueue;
         Properties descriptor = new Properties();
         Path animationDescriptorPath = FileSystems.getDefault().getPath(dataDirPath,animationDescriptor);
         try {
@@ -85,10 +89,8 @@ public class Animation {
      * @param currentTime           the current time
      * @param xpos                  visible absolute x
      * @param ypos                  visible absolute y
-     * @param g where to draw
      */
-    public void draw(long timeAnimationStart, long timeAnimationComplete,long currentTime, int xpos, int ypos, 
-                     Graphics2D g){
+    public void draw(long timeAnimationStart, long timeAnimationComplete,long currentTime, int xpos, int ypos) {
         //what image are we drawing?
         timeAnimationComplete = timeAnimationComplete - timeAnimationStart;
         currentTime = currentTime - timeAnimationStart;
@@ -103,18 +105,7 @@ public class Animation {
                 break;
             }
         }
-        g.drawImage(currentFrame,xpos,ypos,null);
+        levelDrawingQueue.add(new ImageInfo(currentFrame,xpos,ypos)); // need to reuse the same instance, which might require making it synch
     }
 
-    /**
-     * When the animation is done moving, what's the frame to use.
-     * currently uses the last frame
-     * @param xpos pixels
-     * @param ypos pixels
-     * @param g where to draw
-     */
-    public void drawDefaultFrame(int xpos, int ypos, Graphics2D g){
-        g.drawImage(frames[frames.length-1],xpos,ypos,null);
-        logger.debug("drawing the default frame");
-    }
 }

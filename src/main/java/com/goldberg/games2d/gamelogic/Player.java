@@ -25,7 +25,7 @@ public class Player implements BehaviorStyle {
 
     /**
      * If there is no user input, we still want to draw the Sprite wherever it is or update state.
-     * Some of behaviors can generate extra commands from the inside, too
+     * Some behaviors can generate extra commands from the inside, too
      * @param currentTime current game time
      */
     public void selectGoal(long currentTime){

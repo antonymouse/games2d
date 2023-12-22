@@ -1,7 +1,10 @@
 package com.goldberg.games2d.data;
 
 import com.goldberg.games2d.exceptions.LevelBuildingException;
-import com.goldberg.games2d.gamelogic.*;
+import com.goldberg.games2d.gamelogic.FrogPlantBinaryInteraction;
+import com.goldberg.games2d.gamelogic.KeyCommand;
+import com.goldberg.games2d.gamelogic.Sprite;
+import com.goldberg.games2d.hardware.ImageInfo;
 import com.google.inject.Provider;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -15,6 +18,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.BlockingQueue;
 
 /**
  * The class represents a level in the game. It's capable of reading the map, validating it, providing map-based
@@ -24,24 +28,29 @@ import java.util.Map;
  */
 public class Level {
     private final String dataDirPath;
-    private final Map<String, Interaction> interactions;
     private int TILE_SIZE_BITS;
+    private int TILE_SIZE;
+    private int MAP_WIDTH;
     public static final String COMMENT_DESIGNATOR = "==";
     public static final String SPRITE_DESIGNATOR = "sprite";
     private Map<String,Tile> tiles;
     private List<Sprite> mySprites;
     private final Provider<Sprite> spriteProvider;
+    private final BlockingQueue<ImageInfo> drawingQueue;
     private Tile[][] map;
     /**
      * Distances between all sprites, recalculated at each step. N**2 algorithm - optimize if needed.
      */
     private final Map<Sprite,int[]> spriteDistances;
     private static final Logger logger = LogManager.getLogger();
+    private Sprite player;
+    private final FrogPlantBinaryInteraction frog2plant = new FrogPlantBinaryInteraction();
 
-    public Level(Provider<Sprite> spriteProvider, String dataDirPath,Map<String, Interaction> interactions) {
+    public Level(Provider<Sprite> spriteProvider, String dataDirPath, 
+                 BlockingQueue<ImageInfo> drawingQueue) {
         this.dataDirPath = dataDirPath;
-        this.interactions = interactions;
         this.spriteProvider = spriteProvider;
+        this.drawingQueue = drawingQueue;
         spriteDistances = new HashMap<>();
     }
     /**
@@ -54,10 +63,11 @@ public class Level {
             mySprites = readSprites(allLines);
             // now that we know how many of them we got...
             mySprites.forEach(sprite -> spriteDistances.put(sprite, new int[mySprites.size()]));    
-            interactions.values().forEach(interaction -> interaction.setAllSprites(mySprites,spriteDistances));
             // all tiles within a level must be the same size
-            TILE_SIZE_BITS = (int)(Math.log(tiles.entrySet().iterator().next().getValue().TILE_SIZE) / Math.log(2));
+            TILE_SIZE = tiles.entrySet().iterator().next().getValue().TILE_SIZE;
+            TILE_SIZE_BITS = (int)(Math.log(TILE_SIZE) / Math.log(2));
             map = readMap(allLines);
+            MAP_WIDTH = tilesToPixels(map[0].length);
             logger.debug("read map of size {} {} y,x",map.length,map[0].length);
         }catch (IOException ioe){
             throw new LevelBuildingException("Unable to read the level's file:"+levelMapFile,ioe);
@@ -66,7 +76,7 @@ public class Level {
 
     /**
      * Locates (if exists) a tile of the given type in the given direction within the given distance from the
-     * starting point.
+     * starting point. Operates in absolute (map) coordinates
      * @param startingPoint where to start at, pixels
      * @param direction where to go
      * @param tileType what to look for
@@ -102,37 +112,42 @@ public class Level {
      * Sends the message to each of the sprites on this level. See {@link Sprite}
      * @param message some keyboard event
      * @param currentTime current game time
-     * @param g to draw on if needed
-     * @see Sprite#processMessage(int[], long, Level, Graphics2D) Sprite's process message
+     * @see Sprite#processMessage(int[], long, Level) Sprite's process message
      */
-    public void processMessage(int[] message, long currentTime, Graphics2D g){
+    public void processMessage(int[] message, long currentTime){
         if(mySprites!=null && !mySprites.isEmpty()){
-            calculateSpriteDistances();
-            mySprites.forEach(sprite -> sprite.processMessage(message,currentTime,this,g));
+            mySprites.forEach(sprite -> sprite.processMessage(message,currentTime,this));
+            calculateSpriteDistances(currentTime);
         }
     }
 
-    private void calculateSpriteDistances() {
+    private void calculateSpriteDistances(long currentTime) {
         // N**2 algo, optimize if needed
-        for (Sprite sprite: mySprites) {
+        for (int i = 0; i < mySprites.size(); i++)  {
+            Sprite sprite =  mySprites.get(i);
             int[] currentSpriteDistances = spriteDistances.get(sprite); 
-            for (int j = 0; j < mySprites.size(); j++) {
+            for (int j = i+1; j < mySprites.size(); j++) {
                 Sprite sprite1 =  mySprites.get(j);
-                currentSpriteDistances[j] = pixelsToTiles((int)Math.ceil(sprite.calcDistance(sprite1))); 
+                currentSpriteDistances[j] = pixelsToTiles((int)Math.ceil(sprite.calcDistance(sprite1)));
+                if( currentSpriteDistances[j]<= frog2plant.getInteractionDistance() && sprite!=sprite1 && 
+                        (sprite.isOfType(frog2plant.getInteractingTypes()[0]) || sprite.isOfType(frog2plant.getInteractingTypes()[1])) &&
+                        (sprite1.isOfType(frog2plant.getInteractingTypes()[0]) || sprite1.isOfType(frog2plant.getInteractingTypes()[1])))
+                {
+                    frog2plant.interact(sprite,sprite1,currentTime);
+                }
             }
             
         }
     }
 
     /**
-     * Passes the invocation to each of the sprites on this level, See {@link Sprite#processGameTick(long, Graphics2D)}
+     * Passes the invocation to each of the sprites on this level, See {@link Sprite#processGameTick(long)}
      * @param currentTime current game time
-     * @param g           where to draw
      */
-    public void processGameTick(long currentTime, Graphics2D g){
+    public void processGameTick(long currentTime){
         if(mySprites!=null && !mySprites.isEmpty()){
-            calculateSpriteDistances();
-            mySprites.forEach(sprite -> sprite.processGameTick(currentTime,g));
+            mySprites.forEach(sprite -> sprite.processGameTick(currentTime));
+            calculateSpriteDistances(currentTime);
         }
     }
     private Tile[][] readMap(List<String> allLines) {
@@ -161,8 +176,14 @@ public class Level {
 
     private List<Sprite> readSprites(List<String> allLines){
         List<Sprite> sprites = new ArrayList<>();
-        allLines.stream().filter(Level::isSpriteLine).forEach(line -> 
-                    sprites.add(spriteProvider.get().configureFromFile(line.substring(line.indexOf(":") + 1)))
+        allLines.stream().filter(Level::isSpriteLine).forEach(line ->
+                {
+                    Sprite currentSprite = spriteProvider.get().configureFromFile(line.substring(line.indexOf(":") + 1));
+                    sprites.add(currentSprite);
+                    if (currentSprite.isOfType("PLAYER")) {
+                        player = currentSprite;
+                    }
+                }
         );
         return sprites;
     } 
@@ -189,28 +210,32 @@ public class Level {
         // otherwise it always paints the window the default color white, which generates blinking
         g.setColor(Color.black);
         g.fillRect(0, 0, screenWidth, screenHeight);
-        int mapWidth = tilesToPixels(map[0].length);
 
-        //adjust for the "player" later
-        int offsetX = 0;
-//        offsetX = Math.max(offsetX, screenWidth - mapWidth);
-//        logger.debug("OffsetX is {}",offsetX);
-        // get the y offset to draw all sprites and tiles
+        /*
+         * The following block sets the viewport (visible part of the level) around the player. The player is placed
+         * in the middle of the viewport, if possible.
+         */
+        int leftSideOfTheViewport = player.getState().getCurrent().getX() - TILE_SIZE - screenWidth/2;
+        leftSideOfTheViewport = Math.max(leftSideOfTheViewport, 0);
+        leftSideOfTheViewport = Math.min(leftSideOfTheViewport,MAP_WIDTH-screenWidth); //so we don't go over right side
         int offsetY = 0;
-//        int offsetY = screenHeight - tilesToPixels(map.length);
-//        logger.debug("offsetY is {}",offsetY);
-        // draw the visible tiles
-//        int firstTileX = pixelsToTiles(-offsetX);
-        int firstTileX = 0;
-//        logger.debug("firstTileX is {}",firstTileX);
-        int lastTileX = firstTileX + pixelsToTiles(screenWidth) + 1;
-//        logger.debug("lastTileX is {}",lastTileX);
-        for (int y=0; y<map.length; y++) {
-            for (int x=firstTileX; x <= lastTileX; x++) {
-//                logger.debug("drawing tile {},{}",x,y);
-                if(x<0 || x>=map[0].length || y>=map.length) continue;
-                map[y][x].draw(g,tilesToPixels(x)+offsetX,tilesToPixels(y)+offsetY);
+        int firstTileX = pixelsToTiles(leftSideOfTheViewport);
+        int lastTileX = firstTileX + pixelsToTiles(screenWidth);
+
+        for (int y = 0; y < map.length; y++) {
+            for (int x = firstTileX; x <= lastTileX; x++) {
+                if (x < 0 || x >= map[0].length) continue;
+                map[y][x].draw(g, tilesToPixels(x) - leftSideOfTheViewport, tilesToPixels(y) + offsetY);
             }
+        }
+        while(drawingQueue.peek()!=null){
+            ImageInfo currentImage = null;
+            try {
+                currentImage = drawingQueue.take();
+            } catch (InterruptedException e) {
+                logger.error("Retrieving an image from non-empty drawing queue was interrupted",e);
+            }
+            g.drawImage(currentImage.getImage(),currentImage.getAbsoluteX()-leftSideOfTheViewport,currentImage.getAbsoluteY(),null);
         }
     }
     /**

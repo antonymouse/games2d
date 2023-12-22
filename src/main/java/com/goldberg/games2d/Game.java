@@ -40,10 +40,9 @@ public class Game {
     private final Map<Integer, UserInputTriggeredState> userInputHandlers;
     private final int PAUSE_KEY;
     private final int EXIT_KEY;
-    private final String dataDirPath;
 
     @Inject
-    public Game(BlockingQueue<int[]> comingKeys,
+    public Game(@Named("KeyInputQueue") BlockingQueue<int[]> comingKeys,
                 @GameUserInputHandlerMap Map<Integer, UserInputTriggeredState> handlers,
                 @Named("PAUSE_KEY") String PAUSE_KEY_CODE,
                 @Named("EXIT_KEY") String EXIT_KEY_CODE,
@@ -52,7 +51,6 @@ public class Game {
         this.EXIT_KEY = Integer.parseInt(EXIT_KEY_CODE);
         this.userInputHandlers = handlers;
         this.comingKeys = comingKeys;
-        this.dataDirPath = dataDirPath;
     }
 
     /**
@@ -114,7 +112,7 @@ public class Game {
     }
     
 
-    private void processUserInput(Graphics2D g, long currentGameTime){
+    private void processUserInput(long currentGameTime){
         boolean spritesProcessed = false; // for more than 1 sprite, make this an array
         while(comingKeys.peek()!=null){
             try {
@@ -123,7 +121,7 @@ public class Game {
                     logger.debug("processing key {}",message[0]);
                     userInputHandlers.get(message[0]).processMessage(message);
                 } else if (PredefinedCommand.valueOfKey(message[0])!=null) {
-                    currentLevel.processMessage(message,currentGameTime,g);
+                    currentLevel.processMessage(message,currentGameTime);
                     spritesProcessed = true;
                 }
             } catch (InterruptedException ie){
@@ -132,7 +130,7 @@ public class Game {
         }
         if(!spritesProcessed){
             // for more than 1 sprite, make this a loop
-            currentLevel.processGameTick(currentGameTime, g);
+            currentLevel.processGameTick(currentGameTime);
         }
     }
    
@@ -176,8 +174,8 @@ public class Game {
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             logger.debug("about to draw the level, loop counter = {}",infiniteLoopCounter);
             try {
+                processUserInput(currentGameTime);
                 currentLevel.draw(g, getWidth(), getHeight());
-                processUserInput(g,currentGameTime);
                 if(pause.isActive()){
                     pause(g);
                 }

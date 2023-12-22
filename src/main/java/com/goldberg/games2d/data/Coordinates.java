@@ -100,7 +100,6 @@ public class Coordinates {
      */
     public static Coordinates intersection(@NotNull Coordinates start1, Coordinates finish1, double v1, 
                                            @NotNull Coordinates start2, double v2){
-        logger.debug("target is: {}", finish1);
         if(finish1 != null)
             return intersection(start1.getX(),start1.getY(), finish1.getX(), finish1.getY(), v1, start2.getX(), start2.getY(), v2);
         else 
