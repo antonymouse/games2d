@@ -13,6 +13,11 @@ configuration should be really simple and held by external ascii files.
 ## Design and Structure
 These concepts are addressed by documentation in docs folder.
 ## Platform development news
+### 12/27/23
+I added the horizontal scrolling, so the level is now more functional. The "game" is currently not fully implemented: there 
+is no scoring, no level reloading, no damage counting and so on. However if anyone needs the missing functionality and wants 
+to use the code please don't hesitate to let me know by opening an issue or emailing. At very least I'll be happy to look at your 
+pull request and most likely I'll just add the missing functionality myself.
 ### 12/19/2023
 The platform supports a game field with various types of cells and npcs. Npcs interact with players. Npcs, players, and
 game field is fully configurable. The NPCs and player's behavior is customizable, but relies on code components for
